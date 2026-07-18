@@ -1,79 +1,97 @@
+import type { WorkSheet } from 'xlsx';
+
+// ISO Date string aliases for self-documentation (e.g., "2026-07-18")
+export type ISODate = string;
+// ISO DateTime string aliases (e.g., "2026-07-18T18:00:00Z")
+export type ISODateTime = string;
+// ISO Time string aliases (e.g., "18:00:00")
+export type ISOTime = string;
+
 export interface DailyLog {
-  date: string; // YYYY-MM-DD
-  rating: number; // 1-5 or 1-10
-  notes: string;
-  highlights: string[];
-  productivity: number; // 1-5
-  sleepHours?: number;
-  mood?: string;
-  tags?: string[];
+  id: string;
+  date: ISODate;
+  createdAt: ISODateTime;
+  updatedAt: ISODateTime;
 }
 
 export interface Expense {
   id: string;
-  date: string; // YYYY-MM-DD
-  amount: number;
+  date: ISODate;
+  time: ISOTime;
   category: string;
   description: string;
-  paymentMethod?: string;
-  tags?: string[];
+  paymentMethod: string;
+  amount: number;
+  currency: string;
+  tags: string; // Comma or space separated
+  notes: string;
 }
-
-export type TaskStatus = 'todo' | 'in_progress' | 'completed' | 'backlog';
-export type TaskPriority = 'low' | 'medium' | 'high';
 
 export interface Task {
   id: string;
   title: string;
-  description?: string;
-  status: TaskStatus;
-  priority: TaskPriority;
-  dueDate?: string; // YYYY-MM-DD
-  completedDate?: string; // YYYY-MM-DD
-  tags?: string[];
+  description: string;
+  status: string; // e.g., 'todo', 'in_progress', 'completed'
+  priority: string; // e.g., 'low', 'medium', 'high'
+  dueDate: ISODate;
+  completedDate: ISODate;
+  reminder: string;
+  tags: string;
 }
 
 export interface Memory {
   id: string;
-  date: string; // YYYY-MM-DD
+  date: ISODate;
   title: string;
-  content: string;
-  sentiment?: 'positive' | 'neutral' | 'negative';
-  tags?: string[];
+  category: string;
+  description: string;
+  location: string;
+  mood: string;
+  favorite: boolean; // boolean parsed from cell
+  tags: string;
 }
 
-export interface CollectionItem {
+export interface Collection {
   id: string;
-  collectionName: string; // e.g., "Books To Read", "Movies Watched"
+  type: string;
   title: string;
-  dateAdded: string; // YYYY-MM-DD
-  rating?: number;
-  notes?: string;
-  status?: string; // e.g., "Reading", "Completed", "Want to Watch"
-  [key: string]: any; // Allow arbitrary fields for user customization
+  creator: string;
+  rating: number; // numeric value
+  status: string;
+  notes: string;
+  tags: string;
 }
 
-export interface CustomModuleField {
-  name: string;
-  type: 'text' | 'number' | 'boolean' | 'date' | 'select';
-  options?: string[]; // For 'select' type
-  required?: boolean;
-}
-
-export interface CustomModuleSchema {
+export interface CustomModule {
   id: string;
   name: string;
-  description?: string;
-  fields: CustomModuleField[];
-  icon?: string; // Lucide icon name
+  icon: string;
+  color: string;
+  displayOrder: number;
 }
 
-export interface CustomModuleData {
-  schemaId: string;
-  items: Array<{
-    id: string;
-    [key: string]: any;
-  }>;
+export type FieldType = 'Text' | 'LongText' | 'Number' | 'Date' | 'Time' | 'Boolean' | 'Dropdown' | 'Rating';
+
+export interface ModuleField {
+  id: string;
+  moduleId: string;
+  fieldName: string;
+  fieldType: FieldType;
+  required: boolean; // boolean parsed from cell
+  options: string[]; // parsed from JSON array string
+  displayOrder: number;
+}
+
+export interface ModuleEntry {
+  id: string;
+  moduleId: string;
+  date: ISODate;
+  data: Record<string, unknown>; // parsed from JSON string with field IDs as keys
+}
+
+export interface UnknownWorksheet {
+  name: string;
+  sheet: WorkSheet;
 }
 
 export interface WorkbookData {
@@ -81,7 +99,11 @@ export interface WorkbookData {
   expenses: Expense[];
   tasks: Task[];
   memories: Memory[];
-  collections: CollectionItem[];
-  customModuleSchemas: CustomModuleSchema[];
-  customModuleData: CustomModuleData[];
+  collections: Collection[];
+  customModules: CustomModule[];
+  moduleFields: ModuleField[];
+  moduleEntries: ModuleEntry[];
+  settings: Record<string, string>; // key-value maps
+  metadata: Record<string, string>; // key-value maps
+  unknownSheets: Record<string, WorkSheet>; // unrecognized worksheets preserved for round trips
 }
