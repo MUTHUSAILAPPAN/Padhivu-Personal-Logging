@@ -49,6 +49,7 @@ export type WorkbookAction =
     }
   | { type: 'MARK_DIRTY' }
   | { type: 'MARK_SAVED' }
+  | { type: 'SET_WORKBOOK_NAME'; payload: string }
   | { type: 'SET_IMPORT_STATUS'; payload: WorkbookState['importStatus'] }
   | { type: 'SET_SAVE_STATUS'; payload: WorkbookState['saveStatus'] }
   | { type: 'SET_FILE_HANDLE'; payload: FileSystemFileHandle | null };
@@ -139,6 +140,12 @@ export const workbookReducer = (state: WorkbookState, action: WorkbookAction): W
         dirty: false,
         lastSavedAt: new Date().toISOString(),
         saveStatus: 'saved'
+      };
+
+    case 'SET_WORKBOOK_NAME':
+      return {
+        ...state,
+        workbookName: action.payload
       };
       
     case 'SET_IMPORT_STATUS':

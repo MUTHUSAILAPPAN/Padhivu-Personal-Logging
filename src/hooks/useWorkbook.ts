@@ -59,6 +59,10 @@ export function useWorkbook() {
     dispatch({ type: 'MARK_SAVED' });
   };
 
+  const setWorkbookName = (name: string) => {
+    dispatch({ type: 'SET_WORKBOOK_NAME', payload: name });
+  };
+
   const setImportStatus = (status: WorkbookState['importStatus']) => {
     dispatch({ type: 'SET_IMPORT_STATUS', payload: status });
   };
@@ -90,6 +94,7 @@ export function useWorkbook() {
     deleteRecord,
     markDirty,
     markSaved,
+    setWorkbookName,
     setImportStatus,
     setSaveStatus,
     setFileHandle

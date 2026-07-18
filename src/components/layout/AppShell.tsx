@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useWorkbook } from '../../hooks/useWorkbook';
+import { useWorkbookSave } from '../../hooks/useWorkbookSave';
 import SearchModal from './SearchModal';
 import {
   LayoutDashboard,
@@ -29,8 +30,10 @@ interface NavItem {
 export default function AppShell() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [feedback, setFeedback] = useState<{ tone: 'success' | 'error' | 'neutral'; message: string } | null>(null);
   const navigate = useNavigate();
-  const { workbookName, dirty, unloadWorkbook } = useWorkbook();
+  const { workbookName, workbookData, dirty, unloadWorkbook } = useWorkbook();
+  const { save, saveAs, isSaving, canSave, describeSaveResult } = useWorkbookSave();
 
   const navigation: NavItem[] = [
     { name: 'Dashboard', href: '/app', icon: LayoutDashboard },
@@ -50,11 +53,29 @@ export default function AppShell() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         setSearchOpen((prev) => !prev);
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && workbookData && !isSaving) {
+        e.preventDefault();
+        void save().then(showSaveOutcome);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [describeSaveResult, isSaving, save, workbookData]);
+
+  useEffect(() => {
+    if (!feedback) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setFeedback(null);
+    }, 2600);
+
+    return () => window.clearTimeout(timer);
+  }, [feedback]);
 
   const handleUnloadWorkbook = () => {
     if (dirty) {
@@ -76,6 +97,12 @@ export default function AppShell() {
     }`;
 
   const displayName = workbookName || 'Local Session';
+  const saveDisabled = !canSave;
+  const statusLabel = dirty ? 'Unsaved changes' : 'Saved';
+  const showSaveOutcome = (result: Awaited<ReturnType<typeof save>>) => {
+    const tone = result.status === 'error' ? 'error' : result.status === 'cancelled' ? 'neutral' : 'success';
+    setFeedback({ tone, message: describeSaveResult(result) });
+  };
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-brand-bg-card border-r border-brand-border py-6 px-4">
@@ -118,7 +145,7 @@ export default function AppShell() {
         ))}
       </nav>
 
-      {/* Workbook Metadata & Close Button */}
+      {/* Workbook Metadata & Save Controls */}
       <div className="mt-auto border-t border-brand-border pt-4 px-2 space-y-3">
         <div className="flex items-center gap-2.5 bg-brand-bg p-3 rounded-xl border border-brand-border">
           <Database className="w-5 h-5 text-brand-text-muted flex-shrink-0" />
@@ -126,11 +153,51 @@ export default function AppShell() {
             <span className="block text-xs font-semibold text-brand-text truncate" title={displayName}>
               {displayName}
             </span>
-            <span className="block text-[10px] text-brand-text-muted truncate">
-              {dirty ? '● Unsaved changes' : 'All changes in memory'}
+            <span className={`block text-[10px] truncate ${dirty ? 'text-amber-600' : 'text-brand-emerald'}`}>
+              {statusLabel}
             </span>
           </div>
         </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => void save().then(showSaveOutcome)}
+            disabled={saveDisabled}
+            className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+              saveDisabled
+                ? 'bg-brand-border/50 text-brand-text-muted cursor-not-allowed'
+                : 'bg-brand-emerald text-white hover:bg-brand-emerald/90 cursor-pointer'
+            }`}
+          >
+            {isSaving ? 'Saving...' : dirty ? 'Save' : 'Saved'}
+          </button>
+
+          <button
+            onClick={() => void saveAs().then(showSaveOutcome)}
+            disabled={isSaving || !workbookData}
+            className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+              isSaving || !workbookData
+                ? 'bg-brand-border/50 text-brand-text-muted cursor-not-allowed'
+                : 'bg-brand-bg hover:bg-brand-border/70 text-brand-text cursor-pointer border border-brand-border'
+            }`}
+          >
+            Save As
+          </button>
+        </div>
+
+        {feedback && (
+          <div
+            className={`rounded-xl px-3 py-2 text-xs border ${
+              feedback.tone === 'error'
+                ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300'
+                : feedback.tone === 'neutral'
+                  ? 'border-brand-border bg-brand-bg text-brand-text-muted'
+                  : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300'
+            }`}
+          >
+            {feedback.message}
+          </div>
+        )}
 
         <button
           onClick={handleUnloadWorkbook}
