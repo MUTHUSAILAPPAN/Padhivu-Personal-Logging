@@ -1,0 +1,76 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+
+@import "tailwindcss";
+
+
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  
+  --color-brand-bg: var(--brand-bg);
+  --color-brand-bg-card: var(--brand-bg-card);
+  --color-brand-text: var(--brand-text);
+  --color-brand-text-muted: var(--brand-text-muted);
+  --color-brand-border: var(--brand-border);
+  --color-brand-emerald: var(--brand-emerald);
+  --color-brand-emerald-light: var(--brand-emerald-light);
+  
+  --shadow-soft: 0 4px 20px -2px var(--shadow-color), 0 2px 8px -1px var(--shadow-color);
+  --shadow-subtle: 0 1px 3px 0 var(--shadow-color), 0 1px 2px -1px var(--shadow-color);
+}
+
+:root {
+  --brand-bg: #FCFBF9; /* Warm off-white */
+  --brand-bg-card: #FFFFFF;
+  --brand-text: #1C1917; /* Dark ink text */
+  --brand-text-muted: #6B6661;
+  --brand-border: #EAE6E1;
+  --brand-emerald: #059669; /* Emerald accent */
+  --brand-emerald-light: #D1FAE5;
+  --shadow-color: rgba(28, 25, 23, 0.05);
+  
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --brand-bg: #121210; /* Dark warm off-black */
+    --brand-bg-card: #1C1C19;
+    --brand-text: #F5F5F4; /* Light text */
+    --brand-text-muted: #A8A29E;
+    --brand-border: #2C2A26;
+    --brand-emerald: #34D399; /* Emerald accent (lighter in dark mode) */
+    --brand-emerald-light: #064E3B;
+    --shadow-color: rgba(0, 0, 0, 0.3);
+    
+    color-scheme: dark;
+  }
+}
+
+body {
+  background-color: var(--brand-bg);
+  color: var(--brand-text);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+/* Custom font utilities to enforce JetBrains Mono for numeric values if needed */
+.font-numeric {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Base custom input styles for a calm dashboard experience */
+input, select, textarea {
+  background-color: var(--brand-bg-card);
+  border: 1px solid var(--brand-border);
+  color: var(--brand-text);
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--brand-emerald);
+  box-shadow: 0 0 0 2px var(--brand-emerald-light);
+}
