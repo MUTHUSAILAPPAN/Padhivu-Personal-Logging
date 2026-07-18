@@ -23,5 +23,8 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"],
-  "exclude": ["src/services/workbook/run-verification.ts"]
+  "exclude": [
+    "src/services/workbook/run-verification.ts",
+    "src/services/analytics/run-verification-phase3.ts"
+  ]
 }

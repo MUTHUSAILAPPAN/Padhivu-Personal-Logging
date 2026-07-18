@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { useWorkbook } from '../../hooks/useWorkbook';
+import SearchModal from './SearchModal';
 import {
   LayoutDashboard,
   BookOpen,
@@ -14,9 +16,9 @@ import {
   X,
   FileSpreadsheet,
   LogOut,
-  Database
+  Database,
+  Search
 } from 'lucide-react';
-
 
 interface NavItem {
   name: string;
@@ -26,7 +28,9 @@ interface NavItem {
 
 export default function AppShell() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const navigate = useNavigate();
+  const { workbookName, dirty, unloadWorkbook } = useWorkbook();
 
   const navigation: NavItem[] = [
     { name: 'Dashboard', href: '/app', icon: LayoutDashboard },
@@ -40,11 +44,29 @@ export default function AppShell() {
     { name: 'Settings', href: '/app/settings', icon: Settings },
   ];
 
+  // Global Ctrl+K / Cmd+K shortcut
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const handleUnloadWorkbook = () => {
-    // Clear any local workbook caches
-    sessionStorage.removeItem('padhivu_workbook_active');
+    if (dirty) {
+      const confirmed = window.confirm(
+        'You have unsaved changes. Are you sure you want to unload the workbook? Changes will be lost.'
+      );
+      if (!confirmed) return;
+    }
+
+    unloadWorkbook();
     localStorage.removeItem('padhivu_last_filename');
-    // Navigate to landing page
+    localStorage.removeItem('padhivu_last_opened');
     navigate('/');
   };
 
@@ -55,10 +77,12 @@ export default function AppShell() {
         : 'text-brand-text-muted hover:bg-brand-border hover:text-brand-text'
     }`;
 
+  const displayName = workbookName || localStorage.getItem('padhivu_last_filename') || 'Local Session';
+
   const sidebarContent = (
     <div className="flex flex-col h-full bg-brand-bg-card border-r border-brand-border py-6 px-4">
       {/* Brand Header */}
-      <div className="flex items-center gap-2.5 px-3 mb-8">
+      <div className="flex items-center gap-2.5 px-3 mb-6">
         <div className="w-9 h-9 bg-brand-emerald text-white rounded-xl flex items-center justify-center font-extrabold text-lg shadow-sm">
           P
         </div>
@@ -69,6 +93,16 @@ export default function AppShell() {
           </span>
         </div>
       </div>
+
+      {/* Search Button */}
+      <button
+        onClick={() => setSearchOpen(true)}
+        className="flex items-center gap-2.5 mx-1 mb-5 px-3 py-2.5 rounded-xl border border-brand-border bg-brand-bg text-brand-text-muted text-sm hover:bg-brand-border/60 transition-colors cursor-pointer"
+      >
+        <Search className="w-4 h-4 flex-shrink-0" />
+        <span className="flex-1 text-left">Search...</span>
+        <kbd className="hidden sm:inline-flex text-[10px] bg-brand-border px-1.5 py-0.5 rounded-md border border-brand-border font-mono">⌘K</kbd>
+      </button>
 
       {/* Navigation List */}
       <nav className="flex-1 space-y-1.5 overflow-y-auto">
@@ -91,11 +125,11 @@ export default function AppShell() {
         <div className="flex items-center gap-2.5 bg-brand-bg p-3 rounded-xl border border-brand-border">
           <Database className="w-5 h-5 text-brand-text-muted flex-shrink-0" />
           <div className="min-w-0">
-            <span className="block text-xs font-semibold text-brand-text truncate">
-              Local Session
+            <span className="block text-xs font-semibold text-brand-text truncate" title={displayName}>
+              {displayName}
             </span>
             <span className="block text-[10px] text-brand-text-muted truncate">
-              Changes not saved to disk
+              {dirty ? '● Unsaved changes' : 'All changes in memory'}
             </span>
           </div>
         </div>
@@ -130,9 +164,18 @@ export default function AppShell() {
           </button>
           <span className="font-bold text-lg tracking-tight">Padhivu</span>
         </div>
-        <div className="flex items-center gap-1 text-[10px] text-brand-emerald bg-brand-emerald-light/20 px-2.5 py-1 rounded-full font-medium border border-brand-emerald/10">
-          <FileSpreadsheet className="w-3.5 h-3.5" />
-          Local
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="p-1.5 rounded-lg text-brand-text-muted hover:bg-brand-border transition-colors cursor-pointer"
+            aria-label="Open search"
+          >
+            <Search className="w-5 h-5" />
+          </button>
+          <div className="flex items-center gap-1 text-[10px] text-brand-emerald bg-brand-emerald-light/20 px-2.5 py-1 rounded-full font-medium border border-brand-emerald/10">
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            Local
+          </div>
         </div>
       </header>
 
@@ -165,6 +208,9 @@ export default function AppShell() {
       <main className="flex-1 p-6 md:p-10 max-w-7xl mx-auto w-full overflow-y-auto">
         <Outlet />
       </main>
+
+      {/* Global Search Modal */}
+      <SearchModal isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

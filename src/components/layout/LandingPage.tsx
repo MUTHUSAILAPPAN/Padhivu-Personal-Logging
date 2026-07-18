@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import * as XLSX from 'xlsx';
+import { useWorkbook } from '../../hooks/useWorkbook';
+import { importWorkbook, createStarterWorkbook } from '../../services/workbook';
 import {
   Download,
   Upload,
@@ -11,62 +12,32 @@ import {
   ArrowRight
 } from 'lucide-react';
 
-
 export default function LandingPage() {
   const navigate = useNavigate();
+  const { setLoadedWorkbook, setImportStatus } = useWorkbook();
   const [hasPreviousSession, setHasPreviousSession] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check if there is cached data or a session token in storage
-    const active = sessionStorage.getItem('padhivu_workbook_active');
     const cachedFilename = localStorage.getItem('padhivu_last_filename');
-    if (active || cachedFilename) {
+    const cachedTimestamp = localStorage.getItem('padhivu_last_opened');
+    if (cachedFilename && cachedTimestamp) {
       setHasPreviousSession(true);
     }
   }, []);
 
   const handleDownloadStarter = () => {
-    // Create worksheets for the core domain types
-    const wb = XLSX.utils.book_new();
-
-    // 1. Daily Logs
-    const logsHeaders = [['Date', 'Rating', 'Notes', 'Highlights', 'Productivity', 'SleepHours', 'Mood', 'Tags']];
-    const wsLogs = XLSX.utils.aoa_to_sheet(logsHeaders);
-    XLSX.utils.book_append_sheet(wb, wsLogs, 'Daily Logs');
-
-    // 2. Expenses
-    const expensesHeaders = [['ID', 'Date', 'Amount', 'Category', 'Description', 'PaymentMethod', 'Tags']];
-    const wsExpenses = XLSX.utils.aoa_to_sheet(expensesHeaders);
-    XLSX.utils.book_append_sheet(wb, wsExpenses, 'Expenses');
-
-    // 3. Tasks
-    const tasksHeaders = [['ID', 'Title', 'Description', 'Status', 'Priority', 'DueDate', 'CompletedDate', 'Tags']];
-    const wsTasks = XLSX.utils.aoa_to_sheet(tasksHeaders);
-    XLSX.utils.book_append_sheet(wb, wsTasks, 'Tasks');
-
-    // 4. Memories
-    const memoriesHeaders = [['ID', 'Date', 'Title', 'Content', 'Sentiment', 'Tags']];
-    const wsMemories = XLSX.utils.aoa_to_sheet(memoriesHeaders);
-    XLSX.utils.book_append_sheet(wb, wsMemories, 'Memories');
-
-    // 5. Collections
-    const collectionsHeaders = [['ID', 'CollectionName', 'Title', 'DateAdded', 'Rating', 'Notes', 'Status']];
-    const wsCollections = XLSX.utils.aoa_to_sheet(collectionsHeaders);
-    XLSX.utils.book_append_sheet(wb, wsCollections, 'Collections');
-
-    // Custom Module Schemas
-    const schemasHeaders = [['ID', 'Name', 'Description', 'FieldsJSON', 'Icon']];
-    const wsSchemas = XLSX.utils.aoa_to_sheet(schemasHeaders);
-    XLSX.utils.book_append_sheet(wb, wsSchemas, 'Custom Module Schemas');
-
-    // Custom Module Data
-    const customDataHeaders = [['SchemaID', 'ItemID', 'DataJSON']];
-    const wsCustomData = XLSX.utils.aoa_to_sheet(customDataHeaders);
-    XLSX.utils.book_append_sheet(wb, wsCustomData, 'Custom Module Data');
-
-    // Write file
-    XLSX.writeFile(wb, 'padhivu_starter.xlsx');
+    const buffer = createStarterWorkbook();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'padhivu_starter.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -74,28 +45,48 @@ export default function LandingPage() {
     if (!file) return;
 
     setImporting(true);
+    setImportError(null);
+    setImportStatus('loading');
 
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        
-        // Log sheet names found as foundation verification
-        console.log('Workbook imported successfully. Sheets found:', workbook.SheetNames);
-        
-        // Store workbook activation
-        sessionStorage.setItem('padhivu_workbook_active', 'true');
+        const arrayBuffer = e.target?.result as ArrayBuffer;
+        const result = importWorkbook(arrayBuffer);
+
+        if (result.errors.length > 0) {
+          const fatalErrors = result.errors.filter((e) => e.severity === 'error');
+          if (fatalErrors.length > 0) {
+            setImportError(
+              `${fatalErrors.length} error(s) found: ${fatalErrors[0].message}`
+            );
+            setImportStatus('error');
+            setImporting(false);
+            return;
+          }
+        }
+
+        // Store lightweight session metadata in localStorage
         localStorage.setItem('padhivu_last_filename', file.name);
-        
-        // Timeout to simulate loading state slightly for smooth micro-interaction
+        localStorage.setItem('padhivu_last_opened', new Date().toISOString());
+
+        // Dispatch to global context
+        setLoadedWorkbook(
+          result.data,
+          file.name,
+          null,
+          result.errors,
+          result.warnings
+        );
+
         setTimeout(() => {
           setImporting(false);
           navigate('/app');
-        }, 800);
-      } catch (error) {
+        }, 400);
+      } catch (error: any) {
         console.error('Failed to parse workbook:', error);
-        alert('Invalid workbook file. Please ensure it is a valid Excel spreadsheet.');
+        setImportError(error.message || 'Failed to read file');
+        setImportStatus('error');
         setImporting(false);
       }
     };
@@ -104,7 +95,8 @@ export default function LandingPage() {
 
   const handleContinuePrevious = () => {
     if (hasPreviousSession) {
-      sessionStorage.setItem('padhivu_workbook_active', 'true');
+      // Cannot restore actual data without re-importing the file.
+      // Navigate to app — the dashboard will show empty state prompting re-import.
       navigate('/app');
     }
   };
@@ -167,6 +159,14 @@ export default function LandingPage() {
           </div>
 
           <div className="space-y-4">
+            {/* Import error banner */}
+            {importError && (
+              <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl p-3 text-xs">
+                <p className="font-semibold">Import Error</p>
+                <p className="mt-0.5">{importError}</p>
+              </div>
+            )}
+
             {/* Import workbook input */}
             <div className="relative">
               <input
