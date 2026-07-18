@@ -65,8 +65,6 @@ export default function AppShell() {
     }
 
     unloadWorkbook();
-    localStorage.removeItem('padhivu_last_filename');
-    localStorage.removeItem('padhivu_last_opened');
     navigate('/');
   };
 
@@ -77,7 +75,7 @@ export default function AppShell() {
         : 'text-brand-text-muted hover:bg-brand-border hover:text-brand-text'
     }`;
 
-  const displayName = workbookName || localStorage.getItem('padhivu_last_filename') || 'Local Session';
+  const displayName = workbookName || 'Local Session';
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-brand-bg-card border-r border-brand-border py-6 px-4">

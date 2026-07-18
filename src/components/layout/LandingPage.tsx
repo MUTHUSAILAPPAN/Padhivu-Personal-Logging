@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWorkbook } from '../../hooks/useWorkbook';
 import { importWorkbook, createStarterWorkbook } from '../../services/workbook';
+import { usePreviousWorkbook } from '../../hooks/usePreviousWorkbook';
 import {
   Download,
   Upload,
@@ -14,18 +15,11 @@ import {
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  const { setLoadedWorkbook, setImportStatus } = useWorkbook();
-  const [hasPreviousSession, setHasPreviousSession] = useState(false);
+  const { setLoadedWorkbook, setImportStatus, setFileHandle } = useWorkbook();
+  const { isSupported, isLoading, session, continuePreviousWorkbook, clearPreviousWorkbook, rememberPreviousWorkbook } = usePreviousWorkbook();
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const cachedFilename = localStorage.getItem('padhivu_last_filename');
-    const cachedTimestamp = localStorage.getItem('padhivu_last_opened');
-    if (cachedFilename && cachedTimestamp) {
-      setHasPreviousSession(true);
-    }
-  }, []);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDownloadStarter = () => {
     const buffer = createStarterWorkbook();
@@ -40,64 +34,96 @@ export default function LandingPage() {
     URL.revokeObjectURL(url);
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
+  const importFromFile = async (file: File, fileHandle?: FileSystemFileHandle | null) => {
     setImporting(true);
     setImportError(null);
     setImportStatus('loading');
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const arrayBuffer = e.target?.result as ArrayBuffer;
-        const result = importWorkbook(arrayBuffer);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = importWorkbook(arrayBuffer);
 
-        if (result.errors.length > 0) {
-          const fatalErrors = result.errors.filter((e) => e.severity === 'error');
-          if (fatalErrors.length > 0) {
-            setImportError(
-              `${fatalErrors.length} error(s) found: ${fatalErrors[0].message}`
-            );
-            setImportStatus('error');
-            setImporting(false);
-            return;
-          }
-        }
-
-        // Store lightweight session metadata in localStorage
-        localStorage.setItem('padhivu_last_filename', file.name);
-        localStorage.setItem('padhivu_last_opened', new Date().toISOString());
-
-        // Dispatch to global context
-        setLoadedWorkbook(
-          result.data,
-          file.name,
-          null,
-          result.errors,
-          result.warnings
-        );
-
-        setTimeout(() => {
+      if (result.errors.length > 0) {
+        const fatalErrors = result.errors.filter((entry) => entry.severity === 'error');
+        if (fatalErrors.length > 0) {
+          setImportError(`${fatalErrors.length} error(s) found: ${fatalErrors[0].message}`);
+          setImportStatus('error');
           setImporting(false);
-          navigate('/app');
-        }, 400);
-      } catch (error: any) {
-        console.error('Failed to parse workbook:', error);
-        setImportError(error.message || 'Failed to read file');
-        setImportStatus('error');
-        setImporting(false);
+          return;
+        }
       }
-    };
-    reader.readAsArrayBuffer(file);
+
+      setLoadedWorkbook(result.data, file.name, fileHandle || null, result.errors, result.warnings);
+      if (fileHandle) {
+        setFileHandle(fileHandle);
+        await rememberPreviousWorkbook(fileHandle, file.name);
+      }
+
+      localStorage.setItem('padhivu_last_filename', file.name);
+      localStorage.setItem('padhivu_last_opened', new Date().toISOString());
+
+      setTimeout(() => {
+        setImporting(false);
+        navigate('/app');
+      }, 400);
+    } catch (error: any) {
+      setImportError(error.message || 'Failed to read file');
+      setImportStatus('error');
+      setImporting(false);
+    }
   };
 
-  const handleContinuePrevious = () => {
-    if (hasPreviousSession) {
-      // Cannot restore actual data without re-importing the file.
-      // Navigate to app — the dashboard will show empty state prompting re-import.
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    void importFromFile(file, null);
+  };
+
+  const handleImportClick = async () => {
+    if (typeof window !== 'undefined' && 'showOpenFilePicker' in window) {
+      try {
+        const picker = (window as Window & {
+          showOpenFilePicker: (options?: {
+            multiple?: boolean;
+            types?: Array<{
+              description?: string;
+              accept?: Record<string, string[]>;
+            }>;
+          }) => Promise<FileSystemFileHandle[]>;
+        }).showOpenFilePicker;
+        const [fileHandle] = await picker({
+          multiple: false,
+          types: [
+            {
+              description: 'Workbook files',
+              accept: {
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+                'application/vnd.ms-excel': ['.xls']
+              }
+            }
+          ]
+        });
+        const file = await fileHandle.getFile();
+        await importFromFile(file, fileHandle);
+        return;
+      } catch {
+        return;
+      }
+    }
+
+    fileInputRef.current?.click();
+  };
+
+  const handleContinuePrevious = async () => {
+    const result = await continuePreviousWorkbook();
+    if (result.ok) {
       navigate('/app');
+      return;
+    }
+
+    if (result.error) {
+      setImportError(result.error);
+      setImportStatus('error');
     }
   };
 
@@ -170,6 +196,7 @@ export default function LandingPage() {
             {/* Import workbook input */}
             <div className="relative">
               <input
+                ref={fileInputRef}
                 type="file"
                 id="workbook-import"
                 accept=".xlsx, .xls, .ods"
@@ -177,8 +204,9 @@ export default function LandingPage() {
                 className="hidden"
                 disabled={importing}
               />
-              <label
-                htmlFor="workbook-import"
+              <button
+                type="button"
+                onClick={handleImportClick}
                 className={`w-full flex items-center justify-center gap-3 bg-brand-emerald hover:bg-brand-emerald/90 text-white font-semibold py-3.5 px-4 rounded-2xl cursor-pointer text-sm shadow-sm transition-all duration-200 hover:-translate-y-[1px] active:translate-y-0 ${
                   importing ? 'opacity-70 pointer-events-none' : ''
                 }`}
@@ -194,7 +222,7 @@ export default function LandingPage() {
                     Import workbook (.xlsx)
                   </>
                 )}
-              </label>
+              </button>
             </div>
 
             {/* Download starter button */}
@@ -216,19 +244,38 @@ export default function LandingPage() {
             {/* Continue previous button */}
             <button
               onClick={handleContinuePrevious}
-              disabled={!hasPreviousSession}
+              disabled={!session || isLoading}
               className={`w-full flex items-center justify-center gap-3 font-semibold py-3.5 px-4 rounded-2xl text-sm transition-all duration-200 ${
-                hasPreviousSession
+                session && !isLoading
                   ? 'bg-brand-border hover:bg-brand-border/80 text-brand-text cursor-pointer'
                   : 'bg-brand-border/40 text-brand-text-muted/50 cursor-not-allowed border border-brand-border/10'
               }`}
             >
               <Play className="w-4 h-4" />
-              Continue previous session
-              {hasPreviousSession && <ArrowRight className="w-4 h-4 ml-auto" />}
+              Continue previous workbook
+              {session && !isLoading && <ArrowRight className="w-4 h-4 ml-auto" />}
             </button>
             
-            {!hasPreviousSession && (
+            {!isSupported && (
+              <p className="text-[10px] text-center text-brand-text-muted">
+                Your browser does not support reopening local files automatically. You can still import and export workbooks.
+              </p>
+            )}
+
+            {session && (
+              <div className="flex items-center justify-between gap-3 text-[10px] text-brand-text-muted">
+                <span className="truncate">Saved: {session.fileName}</span>
+                <button
+                  type="button"
+                  onClick={clearPreviousWorkbook}
+                  className="text-brand-emerald font-medium hover:underline"
+                >
+                  Forget previous workbook
+                </button>
+              </div>
+            )}
+
+            {!session && !isLoading && isSupported && (
               <p className="text-[10px] text-center text-brand-text-muted">
                 No active session found in storage cache.
               </p>
