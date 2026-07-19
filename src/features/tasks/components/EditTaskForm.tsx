@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Pencil, X } from 'lucide-react';
 import type { Task } from '../../../types';
+import { getLocalDateString } from '../../../utils';
 import { taskFormSchema, type TaskFormValues } from '../taskSchema';
 import TaskFormFields from './TaskFormFields';
 
@@ -56,7 +57,7 @@ export default function EditTaskForm({ task, isOpen, onClose, onSubmitTask }: Ed
     const isNowCompleted = isCompletedStatus(nextStatus);
     const preservedCompletedDate = task.completedDate || '';
     const nextCompletedDate = isNowCompleted
-      ? preservedCompletedDate || new Date().toISOString().slice(0, 10)
+      ? preservedCompletedDate || getLocalDateString()
       : '';
 
     const trimmedTags = values.tags

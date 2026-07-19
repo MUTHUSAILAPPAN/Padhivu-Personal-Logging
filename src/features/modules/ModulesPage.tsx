@@ -15,6 +15,7 @@ import {
 import { PageHeader, WorkbookEmptyState } from '../../components/ui/PageState';
 import { useWorkbook } from '../../hooks/useWorkbook';
 import type { CustomModule, FieldType, ModuleEntry, ModuleField } from '../../types';
+import { getLocalDateString } from '../../utils';
 
 type ModuleFormValues = {
   name: string;
@@ -94,7 +95,7 @@ const parseFieldOptions = (input: string): string[] => {
     .filter(Boolean);
 };
 
-const getToday = () => new Date().toISOString().slice(0, 10);
+const getToday = () => getLocalDateString();
 
 export default function ModulesPage() {
   const { workbookData, addRecord, updateRecord, deleteRecord } = useWorkbook();

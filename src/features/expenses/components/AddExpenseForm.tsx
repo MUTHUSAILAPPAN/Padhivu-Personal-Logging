@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { PlusCircle, X } from 'lucide-react';
 import type { Expense } from '../../../types';
 import { expenseFormSchema, type ExpenseFormValues } from '../expenseSchema';
+import { getLocalDateString } from '../../../utils';
 
 interface AddExpenseFormProps {
   isOpen: boolean;
@@ -12,7 +13,7 @@ interface AddExpenseFormProps {
   onSubmitExpense: (expense: Expense) => void;
 }
 
-const getToday = () => new Date().toISOString().slice(0, 10);
+const getToday = () => getLocalDateString();
 
 const defaultValues = (currency: string): ExpenseFormValues => ({
   date: getToday(),

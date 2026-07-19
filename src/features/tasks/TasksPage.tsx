@@ -5,6 +5,7 @@ import { useWorkbook } from '../../hooks/useWorkbook';
 import { PageHeader, WorkbookEmptyState } from '../../components/ui/PageState';
 import { getTaskAnalytics } from '../../services/analytics/taskAnalytics';
 import type { Task } from '../../types';
+import { getLocalDateString } from '../../utils';
 import AddTaskForm from './components/AddTaskForm';
 import EditTaskForm from './components/EditTaskForm';
 import DeleteTaskDialog from './components/DeleteTaskDialog';
@@ -83,7 +84,7 @@ export default function TasksPage() {
     const isCompleted = normalizeKey(task.status || openStatusValue) === 'completed';
     updateRecord('tasks', task.id, {
       status: isCompleted ? openStatusValue : completedStatusValue,
-      completedDate: isCompleted ? '' : new Date().toISOString().slice(0, 10)
+      completedDate: isCompleted ? '' : getLocalDateString()
     });
   };
 
