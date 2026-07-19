@@ -55,6 +55,23 @@ export function useWorkbook() {
     dispatch({ type: 'MARK_DIRTY' });
   };
 
+  const updateSettings = (settings: Record<string, string>) => {
+    if (!state.workbookData) {
+      return;
+    }
+
+    const nextWorkbookData = {
+      ...state.workbookData,
+      settings: {
+        ...(state.workbookData.settings || {}),
+        ...settings
+      }
+    };
+
+    setLoadedWorkbook(nextWorkbookData, state.workbookName || 'Local Workbook', state.fileHandle, state.importErrors, state.importWarnings);
+    markDirty();
+  };
+
   const markSaved = () => {
     dispatch({ type: 'MARK_SAVED' });
   };
@@ -92,6 +109,7 @@ export function useWorkbook() {
     addRecord,
     updateRecord,
     deleteRecord,
+    updateSettings,
     markDirty,
     markSaved,
     setWorkbookName,

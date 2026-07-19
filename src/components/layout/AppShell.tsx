@@ -47,6 +47,69 @@ export default function AppShell() {
     { name: 'Settings', href: '/app/settings', icon: Settings },
   ];
 
+  useEffect(() => {
+    if (!workbookData) {
+      return;
+    }
+
+    const root = document.documentElement;
+    const themePreference = workbookData.settings?.theme || 'system';
+    const resolveTheme = (preference: string) => {
+      if (preference === 'light' || preference === 'dark') {
+        return preference;
+      }
+
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    };
+
+    const applyTheme = (preference: string) => {
+      const resolvedTheme = resolveTheme(preference);
+      root.dataset.theme = resolvedTheme;
+      root.style.colorScheme = resolvedTheme;
+
+      const palette = resolvedTheme === 'dark'
+        ? {
+            '--brand-bg': '#121210',
+            '--brand-bg-card': '#1C1C19',
+            '--brand-text': '#F5F5F4',
+            '--brand-text-muted': '#A8A29E',
+            '--brand-border': '#2C2A26',
+            '--brand-emerald': '#34D399',
+            '--brand-emerald-light': '#064E3B',
+            '--shadow-color': 'rgba(0, 0, 0, 0.3)'
+          }
+        : {
+            '--brand-bg': '#FCFBF9',
+            '--brand-bg-card': '#FFFFFF',
+            '--brand-text': '#1C1917',
+            '--brand-text-muted': '#6B6661',
+            '--brand-border': '#EAE6E1',
+            '--brand-emerald': '#059669',
+            '--brand-emerald-light': '#D1FAE5',
+            '--shadow-color': 'rgba(28, 25, 23, 0.05)'
+          };
+
+      Object.entries(palette).forEach(([key, value]) => {
+        root.style.setProperty(key, value);
+      });
+    };
+
+    applyTheme(themePreference);
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleSystemThemeChange = () => {
+      if (themePreference === 'system') {
+        applyTheme('system');
+      }
+    };
+
+    mediaQuery.addEventListener?.('change', handleSystemThemeChange);
+
+    return () => {
+      mediaQuery.removeEventListener?.('change', handleSystemThemeChange);
+    };
+  }, [workbookData]);
+
   // Global Ctrl+K / Cmd+K shortcut
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
