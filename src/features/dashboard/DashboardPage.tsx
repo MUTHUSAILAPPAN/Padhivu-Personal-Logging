@@ -5,14 +5,13 @@ import {
   FolderOpen,
   Grid,
   Heart,
-  CalendarDays,
   BadgeDollarSign,
-  Activity,
   CheckCircle2,
   Circle,
   AlertTriangle
 } from 'lucide-react';
 import { useWorkbook } from '../../hooks/useWorkbook';
+import { PageHeader } from '../../components/ui/PageState';
 import {
   getGreeting,
   getTodayLabel,
@@ -121,30 +120,12 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <header className="rounded-3xl border border-brand-border bg-brand-bg-card p-6 shadow-subtle">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-brand-emerald/10 bg-brand-emerald/10 px-3 py-1 text-xs font-semibold text-brand-emerald">
-              <CalendarDays className="h-3.5 w-3.5" />
-              {dashboardState.todayLabel}
-            </div>
-            <div>
-              <p className="text-sm font-medium uppercase tracking-[0.18em] text-brand-text-muted">{dashboardState.greeting}</p>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-brand-text">{workbookName || 'Padhivu workbook'}</h1>
-              <p className="mt-2 max-w-2xl text-base leading-relaxed text-brand-text-muted">
-                A calm local home for your workbook-backed notes, tasks, expenses, and custom logs.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 text-sm text-brand-text-muted">
-            <span className="inline-flex items-center gap-2 rounded-full border border-brand-border bg-brand-bg px-3 py-1.5">
-              <Activity className="h-4 w-4 text-brand-emerald" />
-              Read only dashboard
-            </span>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        eyebrow={dashboardState.todayLabel}
+        title={workbookName || 'Padhivu workbook'}
+        description={`${dashboardState.greeting}. A calm local home for your workbook-backed notes, tasks, expenses, and custom logs.`}
+        badge="Read only dashboard"
+      />
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard

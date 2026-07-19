@@ -1,94 +1,102 @@
 # Padhivu
 
-**Padhivu** (Tamil for *Record* / *Log*) is a local-first personal logging PWA designed to give you complete ownership of your data. The source of truth for all logged entries, tasks, memories, and collections is a standard Excel workbook (`.xlsx`) stored locally on your device.
+Padhivu is a local-first workbook app for personal tracking. It uses a standard Excel workbook as the source of truth, so your data stays on your device instead of living in a remote database.
 
----
+## What Is Implemented
 
-## Architecture: Local-First & Single File Source of Truth
+- Workbook import from the landing page.
+- Remembered previous workbook session, with an explicit continue/forget flow.
+- Save, Save As, and browser download fallback for workbook export.
+- Read-only dashboard with workbook-aware summaries.
+- Tasks view with create, edit, delete, filter, and completion toggle.
+- Expenses view with list, create, delete, and summary totals.
+- Global search inside the app shell.
+- Route-based navigation for the current workbook areas.
 
-Unlike traditional applications that persist logs to cloud databases or servers, Padhivu operates **purely in the client browser environment**.
+## Architecture
 
-```
-┌──────────────────┐               ┌────────────────────┐
-│                  │  Load File    │                    │
-│  Excel Workbook  ├──────────────>│  Padhivu UI (PWA)  │
-│  (.xlsx on disk) │               │  (React Memory)    │
-│                  │<──────────────┤                    │
-└──────────────────┘  Save/Export  └────────────────────┘
-```
-
-### Key Pillars
-- **Zero Server Footprint**: No servers, no APIs, no analytics tracking, and no external tracking telemetry.
-- **Excel as Database**: SheetJS (`xlsx`) parses and serializes data tables (Daily Logs, Expenses, Tasks, Memories, Collections) from worksheets directly.
-- **Session-Based Lifespan**: Data lives in React component state / transient browser storage during active usage. To persist changes permanently, users download the updated workbook file to overwrite their local source of truth.
-- **Offline Capabilities**: Full PWA offline caching powered by `vite-plugin-pwa`.
-
----
-
-## Directory Structure
-
-We use a feature-based folder architecture to isolate components, logic, and models by module:
-
-```
-src/
- ├── assets/          # Static logos, graphics, and styles
- ├── components/
- │    ├── layout/     # Shared layouts (AppShell, LandingPage, NotFoundPage)
- │    └── ui/         # Reusable accessible UI components (Buttons, Inputs)
- ├── features/        # Feature domains containing views and components
- │    ├── dashboard/  # Main hub and analytics summaries
- │    ├── daily-log/  # Reflected daily records
- │    ├── expenses/   # Personal financial logs
- │    ├── tasks/      # Checklists and priorities
- │    ├── memories/   # Journaling and memories
- │    ├── collections/# Curated logs (books, movies, routines)
- │    └── modules/    # User-defined custom tracking schemas
- ├── hooks/           # Shared React custom hooks
- ├── routes/          # Router definitions (React Router v6+)
- ├── services/        # Service clients (SheetJS parser, LocalStorage trackers)
- │    ├── workbook/   # Workbook parser/converter routines
- │    ├── analytics/  # Trend computation algorithms
- │    └── storage/    # Browser storage helpers
- ├── types/           # System-wide TypeScript type definitions
- └── utils/           # Auxiliary formatting/date functions
+```mermaid
+flowchart LR
+  A[Excel workbook on device] --> B[Padhivu UI in browser]
+  B --> C[WorkbookContext + reducer]
+  C --> D[Feature pages]
+  D --> E[Save / Save As service]
+  E --> A
+  B --> F[IndexedDB session memory]
+  F --> B
+  E --> G[Browser download fallback]
 ```
 
----
+## Local-First And Privacy
 
-## Technology Stack
+- No backend API is used.
+- No cloud account is required.
+- The workbook file is the source of truth.
+- Session memory only stores a previous workbook handle reference plus file metadata.
+- Workbook content is not uploaded to a server by the app.
+- When native file saving is unavailable, the app falls back to downloading a new workbook file.
 
-- **Core Framework**: React 18 with TypeScript and Vite
-- **Styling**: Tailwind CSS v4 (configured via theme variables in `src/index.css` and `@tailwindcss/vite`)
-- **Routing**: React Router (`react-router-dom`)
-- **Excel Utilities**: SheetJS (`xlsx`) for parsing/exporting sheets
-- **Icons**: Lucide React
-- **Validation**: React Hook Form & Zod
-- **Analytics & Graphs**: Recharts & date-fns
-- **Offline Support**: `vite-plugin-pwa`
+## Supported Workbook Sheets
 
----
+Padhivu currently reads and writes these worksheet names:
 
-## Getting Started
+- `DailyLogs`
+- `Expenses`
+- `Tasks`
+- `Memories`
+- `Collections`
+- `CustomModules`
+- `ModuleFields`
+- `ModuleEntries`
+- `Settings`
+- `Metadata`
 
-### Prerequisites
-- Node.js (v18+)
-- npm or yarn
+Unknown worksheets are preserved during round trips so workbook users do not lose unrelated sheets.
 
-### Installation
-Clone the repository and install dependencies:
+## Setup
+
+### Install dependencies
+
 ```bash
 npm install
 ```
 
-### Running Locally (Development)
-Start the Vite local dev server:
+### Start the dev server
+
 ```bash
 npm run dev
 ```
 
-### Building for Production
-Verify compilation and package the client-side bundle:
+### Build for production
+
 ```bash
 npm run build
 ```
-This builds static assets under the `dist/` directory, which can be deployed to any static host (GitHub Pages, Netlify, Vercel, or hosted locally offline).
+
+### Preview the production build
+
+```bash
+npm run preview
+```
+
+## Manual Test Checklist
+
+- Import a workbook from the landing page and confirm the app opens into the dashboard.
+- Create a task and confirm it appears in the Tasks list.
+- Create an expense and confirm it appears in the Expenses list.
+- Use Save to write changes back to the current workbook when file access is available.
+- Use Save As to export a new workbook copy.
+- Disable browser file access or use a browser path that blocks it, then confirm the download fallback still produces a workbook file.
+
+## Roadmap
+
+These areas are visible in navigation but not yet fully implemented:
+
+- Daily Logs
+- Memories
+- Collections
+- Custom Modules
+- Insights
+- Settings
+
+Each roadmap area will stay workbook-backed and local-first when it is added.
