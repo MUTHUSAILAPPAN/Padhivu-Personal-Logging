@@ -5,6 +5,8 @@ interface TaskCardProps {
   task: Task;
   overdue?: boolean;
   onToggleComplete: (task: Task) => void;
+  onEdit: (task: Task) => void;
+  onDelete: (task: Task) => void;
 }
 
 const statusTone: Record<string, string> = {
@@ -23,7 +25,7 @@ const priorityTone: Record<string, string> = {
 const normalizeKey = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, '_');
 const openStatusValue = 'Not Started';
 
-export default function TaskCard({ task, overdue = false, onToggleComplete }: TaskCardProps) {
+export default function TaskCard({ task, overdue = false, onToggleComplete, onEdit, onDelete }: TaskCardProps) {
   const statusKey = normalizeKey(task.status || 'Not Started');
   const priorityKey = normalizeKey(task.priority || 'Medium');
   const isCompleted = statusKey === 'completed';
@@ -103,6 +105,23 @@ export default function TaskCard({ task, overdue = false, onToggleComplete }: Ta
       {isCompleted && task.completedDate && (
         <p className="mt-3 text-xs text-brand-text-muted">Completed on {task.completedDate}</p>
       )}
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => onEdit(task)}
+          className="inline-flex items-center justify-center rounded-2xl border border-brand-border bg-brand-bg px-3 py-2 text-xs font-medium text-brand-text transition-colors hover:bg-brand-border/60"
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          onClick={() => onDelete(task)}
+          className="inline-flex items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700 transition-colors hover:bg-rose-100"
+        >
+          Delete
+        </button>
+      </div>
     </article>
   );
 }

@@ -6,6 +6,8 @@ import { useWorkbook } from '../../hooks/useWorkbook';
 import { getTaskAnalytics } from '../../services/analytics/taskAnalytics';
 import type { Task } from '../../types';
 import AddTaskForm from './components/AddTaskForm';
+import EditTaskForm from './components/EditTaskForm';
+import DeleteTaskDialog from './components/DeleteTaskDialog';
 import TaskList from './components/TaskList';
 
 const priorityWeight: Record<string, number> = {
@@ -17,6 +19,7 @@ const priorityWeight: Record<string, number> = {
 const normalizeKey = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, '_');
 const completedStatusValue = 'Completed';
 const openStatusValue = 'Not Started';
+type TaskFilter = 'all' | 'open' | 'completed';
 
 const getDueDateSortValue = (task: Task): number => {
   if (!task.dueDate) {
@@ -28,8 +31,12 @@ const getDueDateSortValue = (task: Task): number => {
 };
 
 export default function TasksPage() {
-  const { workbookData, addRecord, updateRecord } = useWorkbook();
+  const { workbookData, addRecord, updateRecord, deleteRecord } = useWorkbook();
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Task | null>(null);
+  const [filter, setFilter] = useState<TaskFilter>('all');
 
   const analytics = useMemo(() => getTaskAnalytics(workbookData?.tasks ?? []), [workbookData?.tasks]);
 
@@ -60,12 +67,48 @@ export default function TasksPage() {
 
   const overdueTaskIds = useMemo(() => new Set(analytics.overdueTasks.map((task) => task.id)), [analytics.overdueTasks]);
 
+  const filteredTasks = useMemo(() => {
+    if (filter === 'all') {
+      return sortedTasks;
+    }
+
+    if (filter === 'completed') {
+      return sortedTasks.filter((task) => normalizeKey(task.status || openStatusValue) === 'completed');
+    }
+
+    return sortedTasks.filter((task) => normalizeKey(task.status || openStatusValue) !== 'completed');
+  }, [filter, sortedTasks]);
+
   const toggleTaskCompletion = (task: Task) => {
     const isCompleted = normalizeKey(task.status || openStatusValue) === 'completed';
     updateRecord('tasks', task.id, {
       status: isCompleted ? openStatusValue : completedStatusValue,
       completedDate: isCompleted ? '' : new Date().toISOString().slice(0, 10)
     });
+  };
+
+  const handleEditTask = (task: Task) => {
+    setEditingTask(task);
+    setIsEditOpen(true);
+  };
+
+  const handleDeleteTask = (task: Task) => {
+    setDeleteTarget(task);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!deleteTarget) {
+      return;
+    }
+
+    deleteRecord('tasks', deleteTarget.id);
+    setDeleteTarget(null);
+  };
+
+  const filterCounts = {
+    all: sortedTasks.length,
+    completed: sortedTasks.filter((task) => normalizeKey(task.status || openStatusValue) === 'completed').length,
+    open: sortedTasks.filter((task) => normalizeKey(task.status || openStatusValue) !== 'completed').length
   };
 
   if (!workbookData) {
@@ -94,7 +137,6 @@ export default function TasksPage() {
   const taskTotal = workbookData.tasks.length;
   const openTaskCount = analytics.totalCount - analytics.completedCount;
   const currentDateLabel = format(new Date(), 'EEEE, MMMM d, yyyy');
-  const hasTasks = sortedTasks.length > 0;
 
   return (
     <div className="space-y-6">
@@ -137,6 +179,39 @@ export default function TasksPage() {
         <CompactStat title="Overdue" value={analytics.overdueTasks.length} emphasis={analytics.overdueTasks.length > 0} />
       </section>
 
+      <section className="rounded-3xl border border-brand-border bg-brand-bg-card p-4 shadow-subtle">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-brand-text-muted">Filters</h2>
+            <p className="mt-1 text-sm text-brand-text-muted">
+              Showing {filterCounts[filter]} {filter === 'all' ? 'tasks' : filter === 'open' ? 'open tasks' : 'completed tasks'}
+            </p>
+          </div>
+          <div role="tablist" aria-label="Task filters" className="inline-flex flex-wrap gap-2 rounded-2xl bg-brand-bg p-1">
+            {(['all', 'open', 'completed'] as const).map((option) => {
+              const isActive = filter === option;
+              const label = option === 'all' ? 'All' : option === 'open' ? 'Open' : 'Completed';
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setFilter(option)}
+                  className={`rounded-xl px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-emerald/30 ${
+                    isActive
+                      ? 'bg-brand-emerald text-white shadow-sm'
+                      : 'text-brand-text-muted hover:bg-brand-border/60'
+                  }`}
+                >
+                  {label} <span className="ml-1 text-xs opacity-80">({filterCounts[option]})</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
       <section className="rounded-3xl border border-brand-border bg-brand-bg-card p-5 shadow-subtle">
         <h2 className="text-lg font-semibold text-brand-text">Task summary</h2>
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -165,26 +240,44 @@ export default function TasksPage() {
           </div>
         </div>
 
-        {hasTasks ? (
-          <TaskList tasks={sortedTasks} overdueTaskIds={overdueTaskIds} onToggleComplete={toggleTaskCompletion} />
+        {filteredTasks.length > 0 ? (
+          <TaskList
+            tasks={filteredTasks}
+            overdueTaskIds={overdueTaskIds}
+            onToggleComplete={toggleTaskCompletion}
+            onEdit={handleEditTask}
+            onDelete={handleDeleteTask}
+          />
         ) : (
           <div className="rounded-3xl border border-dashed border-brand-border bg-brand-bg-card p-8 text-center shadow-subtle">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-emerald/10 text-brand-emerald">
               <ListTodo className="h-6 w-6" />
             </div>
-            <h3 className="mt-5 text-xl font-semibold text-brand-text">No tasks yet</h3>
+            <h3 className="mt-5 text-xl font-semibold text-brand-text">{filter === 'all' ? 'No tasks yet' : 'No matching tasks'}</h3>
             <p className="mt-2 text-sm leading-relaxed text-brand-text-muted">
-              Add your first task to start building the list stored in your workbook.
+              {filter === 'all'
+                ? 'Add your first task to start building the list stored in your workbook.'
+                : 'Try a different filter or add a new task to see it here.'}
             </p>
-            <div className="mt-5">
+            <div className="mt-5 flex flex-wrap justify-center gap-3">
               <button
                 type="button"
                 onClick={() => setIsFormOpen(true)}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-brand-emerald px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-emerald/90"
               >
                 <Plus className="h-4 w-4" />
-                Add your first task
+                Add task
               </button>
+              {filter !== 'all' && (
+                <button
+                  type="button"
+                  onClick={() => setFilter('all')}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-brand-border bg-brand-bg px-4 py-3 text-sm font-semibold text-brand-text transition-colors hover:bg-brand-border/60"
+                >
+                  <CheckSquare className="h-4 w-4" />
+                  Show all tasks
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -196,6 +289,25 @@ export default function TasksPage() {
         onSubmitTask={(task) => {
           addRecord('tasks', task);
         }}
+      />
+
+      <EditTaskForm
+        task={editingTask}
+        isOpen={isEditOpen}
+        onClose={() => {
+          setIsEditOpen(false);
+          setEditingTask(null);
+        }}
+        onSubmitTask={(task) => {
+          updateRecord('tasks', task.id, task);
+        }}
+      />
+
+      <DeleteTaskDialog
+        title={deleteTarget?.title || ''}
+        isOpen={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleConfirmDelete}
       />
     </div>
   );
