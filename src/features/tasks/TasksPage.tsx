@@ -15,6 +15,8 @@ const priorityWeight: Record<string, number> = {
 };
 
 const normalizeKey = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, '_');
+const completedStatusValue = 'Completed';
+const openStatusValue = 'Not Started';
 
 const getDueDateSortValue = (task: Task): number => {
   if (!task.dueDate) {
@@ -26,7 +28,7 @@ const getDueDateSortValue = (task: Task): number => {
 };
 
 export default function TasksPage() {
-  const { workbookData, addRecord } = useWorkbook();
+  const { workbookData, addRecord, updateRecord } = useWorkbook();
   const [isFormOpen, setIsFormOpen] = useState(false);
 
   const analytics = useMemo(() => getTaskAnalytics(workbookData?.tasks ?? []), [workbookData?.tasks]);
@@ -57,6 +59,14 @@ export default function TasksPage() {
   }, [workbookData?.tasks]);
 
   const overdueTaskIds = useMemo(() => new Set(analytics.overdueTasks.map((task) => task.id)), [analytics.overdueTasks]);
+
+  const toggleTaskCompletion = (task: Task) => {
+    const isCompleted = normalizeKey(task.status || openStatusValue) === 'completed';
+    updateRecord('tasks', task.id, {
+      status: isCompleted ? openStatusValue : completedStatusValue,
+      completedDate: isCompleted ? '' : new Date().toISOString().slice(0, 10)
+    });
+  };
 
   if (!workbookData) {
     return (
@@ -156,7 +166,7 @@ export default function TasksPage() {
         </div>
 
         {hasTasks ? (
-          <TaskList tasks={sortedTasks} overdueTaskIds={overdueTaskIds} />
+          <TaskList tasks={sortedTasks} overdueTaskIds={overdueTaskIds} onToggleComplete={toggleTaskCompletion} />
         ) : (
           <div className="rounded-3xl border border-dashed border-brand-border bg-brand-bg-card p-8 text-center shadow-subtle">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-emerald/10 text-brand-emerald">

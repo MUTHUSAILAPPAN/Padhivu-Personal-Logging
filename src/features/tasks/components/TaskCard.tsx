@@ -4,6 +4,7 @@ import type { Task } from '../../../types';
 interface TaskCardProps {
   task: Task;
   overdue?: boolean;
+  onToggleComplete: (task: Task) => void;
 }
 
 const statusTone: Record<string, string> = {
@@ -20,35 +21,70 @@ const priorityTone: Record<string, string> = {
 };
 
 const normalizeKey = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, '_');
+const openStatusValue = 'Not Started';
 
-export default function TaskCard({ task, overdue = false }: TaskCardProps) {
+export default function TaskCard({ task, overdue = false, onToggleComplete }: TaskCardProps) {
   const statusKey = normalizeKey(task.status || 'Not Started');
   const priorityKey = normalizeKey(task.priority || 'Medium');
+  const isCompleted = statusKey === 'completed';
+  const isOverdue = overdue && !isCompleted;
+
+  const handleToggle = () => {
+    onToggleComplete(task);
+  };
 
   return (
-    <article className="rounded-2xl border border-brand-border bg-brand-bg-card p-5 shadow-subtle">
+    <article
+      className={`rounded-2xl border p-5 shadow-subtle transition-colors ${
+        isCompleted
+          ? 'border-brand-border bg-brand-bg-card/80 opacity-85'
+          : 'border-brand-border bg-brand-bg-card'
+      }`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-base font-semibold text-brand-text">{task.title}</h3>
-            {overdue && (
+            <h3 className={`text-base font-semibold text-brand-text ${isCompleted ? 'line-through decoration-2 decoration-brand-text-muted/50' : ''}`}>
+              {task.title}
+            </h3>
+            {isOverdue && (
               <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700">
                 <AlertTriangle className="h-3 w-3" />
                 Overdue
               </span>
             )}
+            {isCompleted && task.completedDate && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                <CheckCircle2 className="h-3 w-3" />
+                Completed {task.completedDate}
+              </span>
+            )}
           </div>
-          {task.description && <p className="mt-2 text-sm leading-relaxed text-brand-text-muted">{task.description}</p>}
+          {task.description && (
+            <p className={`mt-2 text-sm leading-relaxed ${isCompleted ? 'text-brand-text-muted/80 line-through decoration-brand-text-muted/40' : 'text-brand-text-muted'}`}>
+              {task.description}
+            </p>
+          )}
         </div>
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-emerald/10 text-brand-emerald">
-          {statusKey === 'completed' ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
-        </div>
+        <button
+          type="button"
+          onClick={handleToggle}
+          className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-colors focus:outline-none focus:ring-2 focus:ring-brand-emerald/30 ${
+            isCompleted
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+              : 'border-brand-border bg-brand-bg text-brand-text-muted hover:bg-brand-border/60'
+          }`}
+          aria-label={isCompleted ? `Mark ${task.title} as open` : `Mark ${task.title} as complete`}
+          title={isCompleted ? `Mark ${task.title} as open` : `Mark ${task.title} as complete`}
+        >
+          {isCompleted ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
+        </button>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2 text-xs font-medium">
         <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${statusTone[statusKey] || statusTone.not_started}`}>
           <Circle className="h-3 w-3" />
-          {task.status || 'Not Started'}
+          {task.status || openStatusValue}
         </span>
         <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${priorityTone[priorityKey] || priorityTone.medium}`}>
           <Flag className="h-3 w-3" />
@@ -63,6 +99,10 @@ export default function TaskCard({ task, overdue = false }: TaskCardProps) {
           {task.dueDate || 'No due date'}
         </span>
       </div>
+
+      {isCompleted && task.completedDate && (
+        <p className="mt-3 text-xs text-brand-text-muted">Completed on {task.completedDate}</p>
+      )}
     </article>
   );
 }
