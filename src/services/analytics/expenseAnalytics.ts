@@ -88,3 +88,11 @@ export const getExpenseAnalytics = (expenses: Expense[] = []): ExpenseSummary =>
     recentExpenses
   };
 };
+
+export const getCategoryBreakdown = (expenses: Expense[] = []) => {
+  const summary = getExpenseAnalytics(expenses);
+
+  return Object.entries(summary.byCategory)
+    .map(([category, total]) => ({ category, total }))
+    .sort((left, right) => right.total - left.total);
+};

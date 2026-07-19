@@ -1,9 +1,10 @@
-import { CalendarDays, CircleDollarSign, CreditCard, NotebookText, Tags, Trash2, Clock3 } from 'lucide-react';
+import { CalendarDays, CircleDollarSign, CreditCard, Clock3, NotebookText, Pencil, Tags, Trash2 } from 'lucide-react';
 import type { Expense } from '../../../types';
 
 interface ExpenseCardProps {
   expense: Expense;
   onDelete: (expense: Expense) => void;
+  onEdit: (expense: Expense) => void;
 }
 
 const normalizeCurrency = (amount: number, currency: string) => {
@@ -14,7 +15,7 @@ const normalizeCurrency = (amount: number, currency: string) => {
   }
 };
 
-export default function ExpenseCard({ expense, onDelete }: ExpenseCardProps) {
+export default function ExpenseCard({ expense, onDelete, onEdit }: ExpenseCardProps) {
   return (
     <article className="rounded-2xl border border-brand-border bg-brand-bg-card p-5 shadow-subtle">
       <div className="flex items-start justify-between gap-3">
@@ -64,15 +65,26 @@ export default function ExpenseCard({ expense, onDelete }: ExpenseCardProps) {
           {expense.notes && <p className="mt-3 text-xs leading-relaxed text-brand-text-muted">{expense.notes}</p>}
         </div>
 
-        <button
-          type="button"
-          onClick={() => onDelete(expense)}
-          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-brand-border bg-brand-bg text-brand-text-muted transition-colors hover:bg-brand-border/60"
-          aria-label={`Delete expense ${expense.category} on ${expense.date}`}
-          title={`Delete ${expense.category}`}
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onEdit(expense)}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-brand-border bg-brand-bg text-brand-text-muted transition-colors hover:bg-brand-border/60"
+            aria-label={`Edit expense ${expense.category} on ${expense.date}`}
+            title={`Edit ${expense.category}`}
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onDelete(expense)}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-brand-border bg-brand-bg text-brand-text-muted transition-colors hover:bg-brand-border/60"
+            aria-label={`Delete expense ${expense.category} on ${expense.date}`}
+            title={`Delete ${expense.category}`}
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </article>
   );
