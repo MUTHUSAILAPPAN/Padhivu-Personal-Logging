@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, BookOpen, Boxes, CalendarDays, Clock3, Heart, PencilLine, Plus, Receipt, Sparkles, Trash2, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, BookOpen, Boxes, CalendarDays, CheckCircle2, Clock3, Heart, ListFilter, PencilLine, Plus, Receipt, Sparkles, Trash2, X } from 'lucide-react';
 import { format, parseISO, isToday, isYesterday } from 'date-fns';
 import { PageHeader, WorkbookEmptyState } from '../../components/ui/PageState';
 import { useWorkbook } from '../../hooks/useWorkbook';
-import type { CustomModule, DailyLog, Expense, Memory, ModuleField, Task } from '../../types';
+import ExpenseForm from '../expenses/components/ExpenseForm';
+import MemoryForm from '../memories/components/MemoryForm';
+import ModuleEntryForm from '../modules/components/ModuleEntryForm';
+import EditTaskForm from '../tasks/components/EditTaskForm';
+import type { CustomModule, DailyLog, Expense, Memory, ModuleEntry, ModuleField, Task } from '../../types';
 import { getLocalDateString, isValidIsoDate } from '../../utils';
 
 const getRelativeLabel = (date: string) => {
@@ -56,42 +59,80 @@ interface DailyLogSummary {
   moduleEntryCount: number;
 }
 
+type LinkedRecordFilter = 'all' | 'expense' | 'task' | 'memory' | 'moduleEntry';
+
+type LinkedDeleteTarget = {
+  kind: 'dailyLog' | 'expense' | 'task' | 'memory' | 'moduleEntry';
+  record: DailyLog | Expense | Task | Memory | ModuleEntry;
+  module?: CustomModule | null;
+};
+
+type LinkedItem =
+  | { kind: 'expense'; record: Expense; sortKey: string }
+  | { kind: 'task'; record: Task; sortKey: string }
+  | { kind: 'memory'; record: Memory; sortKey: string }
+  | { kind: 'moduleEntry'; record: ModuleEntry; module: CustomModule | null; sortKey: string };
+
 export default function DailyLogPage() {
-  const navigate = useNavigate();
   const { workbookData, addRecord, updateRecord, deleteRecord } = useWorkbook();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createDate, setCreateDate] = useState(getLocalDateString());
   const [createError, setCreateError] = useState<string | null>(null);
   const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
+  const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editDate, setEditDate] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<DailyLog | null>(null);
+  const [selectedRecordFilter, setSelectedRecordFilter] = useState<LinkedRecordFilter>('all');
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editingMemory, setEditingMemory] = useState<Memory | null>(null);
+  const [editingModuleEntry, setEditingModuleEntry] = useState<ModuleEntry | null>(null);
+  const [editingModule, setEditingModule] = useState<CustomModule | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<LinkedDeleteTarget | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const dailyLogs = useMemo(() => {
     return [...(workbookData?.dailyLogs ?? [])].sort((left, right) => right.date.localeCompare(left.date));
   }, [workbookData?.dailyLogs]);
 
+  const selectedLog = useMemo(() => {
+    return dailyLogs.find((log) => log.id === selectedLogId) ?? null;
+  }, [dailyLogs, selectedLogId]);
+
   useEffect(() => {
     if (!workbookData) {
       setSelectedLogId(null);
+      setIsDetailPanelOpen(false);
       return;
     }
 
     if (!dailyLogs.length) {
       setSelectedLogId(null);
+      setIsDetailPanelOpen(false);
       return;
     }
 
     if (!selectedLogId || !dailyLogs.some((log) => log.id === selectedLogId)) {
       setSelectedLogId(dailyLogs[0].id);
+      setIsDetailPanelOpen(true);
     }
   }, [dailyLogs, selectedLogId, workbookData]);
 
-  const selectedLog = useMemo(() => {
-    return dailyLogs.find((log) => log.id === selectedLogId) ?? null;
-  }, [dailyLogs, selectedLogId]);
+  useEffect(() => {
+    if (!selectedLog || !isDetailPanelOpen) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsDetailPanelOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isDetailPanelOpen, selectedLog]);
 
   const summaries = useMemo<DailyLogSummary[]>(() => {
     const expenses = workbookData?.expenses ?? [];
@@ -154,6 +195,27 @@ export default function DailyLogPage() {
 
   const moduleFields = useMemo(() => workbookData?.moduleFields ?? [], [workbookData?.moduleFields]);
 
+  const linkedItems = useMemo<LinkedItem[]>(() => {
+    if (!selectedLog) {
+      return [];
+    }
+
+    return [
+      ...linkedExpenses.map((expense) => ({ kind: 'expense' as const, record: expense, sortKey: `${expense.date}${expense.time}${expense.id}` })),
+      ...linkedTasks.map((task) => ({ kind: 'task' as const, record: task, sortKey: `${task.dueDate || task.completedDate}${task.id}` })),
+      ...linkedMemories.map((memory) => ({ kind: 'memory' as const, record: memory, sortKey: `${memory.date}${memory.id}` })),
+      ...linkedModuleEntries.map(({ entry, module }) => ({ kind: 'moduleEntry' as const, record: entry, module, sortKey: `${entry.date}${entry.id}` }))
+    ].sort((left, right) => left.sortKey.localeCompare(right.sortKey));
+  }, [linkedExpenses, linkedMemories, linkedModuleEntries, linkedTasks, selectedLog]);
+
+  const filteredLinkedItems = useMemo(() => {
+    if (selectedRecordFilter === 'all') {
+      return linkedItems;
+    }
+
+    return linkedItems.filter((item) => item.kind === selectedRecordFilter);
+  }, [linkedItems, selectedRecordFilter]);
+
   const handleCreateDailyLog = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setCreateError(null);
@@ -167,6 +229,7 @@ export default function DailyLogPage() {
     const existingLog = dailyLogs.find((log) => log.date === normalizedDate);
     if (existingLog) {
       setSelectedLogId(existingLog.id);
+      setIsDetailPanelOpen(true);
       setStatusMessage(`A daily log for ${normalizedDate} already exists, so that day was opened instead.`);
       setCreateDate(getLocalDateString());
       setIsCreateOpen(false);
@@ -183,6 +246,7 @@ export default function DailyLogPage() {
 
     addRecord('dailyLogs', nextLog);
     setSelectedLogId(nextLog.id);
+    setIsDetailPanelOpen(true);
     setStatusMessage(`Created daily log for ${normalizedDate}.`);
     setCreateDate(getLocalDateString());
     setIsCreateOpen(false);
@@ -214,19 +278,63 @@ export default function DailyLogPage() {
     });
 
     setSelectedLogId(selectedLog.id);
+    setIsDetailPanelOpen(true);
     setStatusMessage(`Updated the day marker to ${normalizedDate}.`);
     setIsEditOpen(false);
     setEditDate('');
   };
 
   const handleDeleteDailyLog = () => {
+    if (!deleteTarget || deleteTarget.kind !== 'dailyLog') {
+      return;
+    }
+
+    deleteRecord('dailyLogs', deleteTarget.record.id);
+    setDeleteTarget(null);
+    setStatusMessage('Deleted the daily-log marker. Linked records remain intact.');
+  };
+
+  const handleDeleteLinkedRecord = () => {
     if (!deleteTarget) {
       return;
     }
 
-    deleteRecord('dailyLogs', deleteTarget.id);
+    if (deleteTarget.kind === 'expense') {
+      deleteRecord('expenses', deleteTarget.record.id);
+      setStatusMessage('Deleted the linked expense.');
+    } else if (deleteTarget.kind === 'task') {
+      deleteRecord('tasks', deleteTarget.record.id);
+      setStatusMessage('Deleted the linked task.');
+    } else if (deleteTarget.kind === 'memory') {
+      deleteRecord('memories', deleteTarget.record.id);
+      setStatusMessage('Deleted the linked memory.');
+    } else if (deleteTarget.kind === 'moduleEntry') {
+      deleteRecord('moduleEntries', deleteTarget.record.id);
+      setStatusMessage('Deleted the linked module entry.');
+    }
+
     setDeleteTarget(null);
-    setStatusMessage('Deleted the daily-log marker. Linked records remain intact.');
+  };
+
+  const handleExpenseSubmit = (expense: Expense) => {
+    updateRecord('expenses', expense.id, expense);
+    setEditingExpense(null);
+  };
+
+  const handleTaskSubmit = (task: Task) => {
+    updateRecord('tasks', task.id, task);
+    setEditingTask(null);
+  };
+
+  const handleMemorySubmit = (memory: Memory) => {
+    updateRecord('memories', memory.id, memory);
+    setEditingMemory(null);
+  };
+
+  const handleModuleEntrySubmit = (entry: ModuleEntry) => {
+    updateRecord('moduleEntries', entry.id, entry);
+    setEditingModuleEntry(null);
+    setEditingModule(null);
   };
 
   if (!workbookData) {
@@ -309,7 +417,10 @@ export default function DailyLogPage() {
                     <button
                       key={log.id}
                       type="button"
-                      onClick={() => setSelectedLogId(log.id)}
+                      onClick={() => {
+                        setSelectedLogId(log.id);
+                        setIsDetailPanelOpen(true);
+                      }}
                       className={`w-full rounded-3xl border p-4 text-left transition-colors ${isSelected ? 'border-brand-emerald bg-brand-emerald/10 shadow-soft' : 'border-brand-border bg-brand-bg hover:border-brand-emerald/40'}`}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -352,7 +463,7 @@ export default function DailyLogPage() {
         </div>
 
         <div className="rounded-3xl border border-brand-border bg-brand-bg-card p-5 shadow-subtle">
-          {selectedLog ? (
+          {selectedLog && isDetailPanelOpen ? (
             <>
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
@@ -361,7 +472,7 @@ export default function DailyLogPage() {
                     {selectedLog.date}
                   </div>
                   <h2 className="mt-3 text-2xl font-semibold text-brand-text">{getRelativeLabel(selectedLog.date)} focus</h2>
-                  <p className="mt-2 text-sm leading-relaxed text-brand-text-muted">A calm daily hub for everything linked to this date. Deleting the day marker keeps all linked records intact.</p>
+                  <p className="mt-2 text-sm leading-relaxed text-brand-text-muted">A compact, workbook-backed detail view for everything linked to this date. Filters are local to the panel and never change the workbook.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -378,113 +489,181 @@ export default function DailyLogPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setDeleteTarget(selectedLog)}
+                    onClick={() => setDeleteTarget({ kind: 'dailyLog', record: selectedLog })}
                     className="inline-flex items-center justify-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 transition-colors hover:bg-rose-100"
                   >
                     <Trash2 className="h-4 w-4" />
                     Delete day
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsDetailPanelOpen(false)}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-brand-border bg-brand-bg text-brand-text-muted transition-colors hover:bg-brand-border/60"
+                    aria-label="Close daily log detail panel"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
 
-              <div className="mt-6 grid gap-4 lg:grid-cols-2">
-                <SectionCard
-                  title="Expenses"
-                  icon={Receipt}
-                  count={linkedExpenses.length}
-                  emptyMessage="No expenses were recorded for this day."
-                  actionLabel="Open expenses"
-                  onAction={() => navigate('/app/expenses')}
-                >
-                  {linkedExpenses.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-brand-border bg-brand-bg p-4 text-sm text-brand-text-muted">No expenses for this day yet.</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {linkedExpenses.map((expense) => (
-                        <div key={expense.id} className="rounded-2xl border border-brand-border bg-brand-bg px-3 py-2">
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="text-sm font-semibold text-brand-text">{expense.category || 'Uncategorized'}</span>
-                            <span className="text-sm font-medium text-brand-emerald">{expense.amount.toFixed(2)} {expense.currency || 'INR'}</span>
-                          </div>
-                          {expense.description ? <p className="mt-1 text-sm text-brand-text-muted">{expense.description}</p> : null}
-                          {expense.time ? <p className="mt-1 text-xs uppercase tracking-[0.16em] text-brand-text-muted">{expense.time}</p> : null}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </SectionCard>
+              <div className="mt-6 flex flex-wrap gap-2">
+                <div className="rounded-2xl border border-brand-border bg-brand-bg px-3 py-2 text-sm text-brand-text-muted">
+                  <span className="font-semibold text-brand-text">{linkedItems.length}</span> linked item{linkedItems.length === 1 ? '' : 's'}
+                </div>
+                <div className="rounded-2xl border border-brand-border bg-brand-bg px-3 py-2 text-sm text-brand-text-muted">
+                  <span className="font-semibold text-brand-text">{linkedExpenses.length}</span> expense{linkedExpenses.length === 1 ? '' : 's'}
+                </div>
+                <div className="rounded-2xl border border-brand-border bg-brand-bg px-3 py-2 text-sm text-brand-text-muted">
+                  <span className="font-semibold text-brand-text">{linkedTasks.length}</span> task{linkedTasks.length === 1 ? '' : 's'}
+                </div>
+                <div className="rounded-2xl border border-brand-border bg-brand-bg px-3 py-2 text-sm text-brand-text-muted">
+                  <span className="font-semibold text-brand-text">{linkedMemories.length}</span> memory{linkedMemories.length === 1 ? '' : 'ies'}
+                </div>
+                <div className="rounded-2xl border border-brand-border bg-brand-bg px-3 py-2 text-sm text-brand-text-muted">
+                  <span className="font-semibold text-brand-text">{linkedModuleEntries.length}</span> module entr{linkedModuleEntries.length === 1 ? 'y' : 'ies'}
+                </div>
+              </div>
 
-                <SectionCard
-                  title="Tasks"
-                  icon={CheckCircle2}
-                  count={linkedTasks.length}
-                  emptyMessage="No tasks are due or completed on this day."
-                  actionLabel="Open tasks"
-                  onAction={() => navigate('/app/tasks')}
-                >
-                  {linkedTasks.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-brand-border bg-brand-bg p-4 text-sm text-brand-text-muted">Tasks count as linked when their due date or completed date matches this day.</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {linkedTasks.map((task) => (
-                        <div key={task.id} className="rounded-2xl border border-brand-border bg-brand-bg px-3 py-2">
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="text-sm font-semibold text-brand-text">{task.title}</span>
-                            <span className="rounded-full border border-brand-border bg-brand-bg-card px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-brand-text-muted">
-                              {task.status || 'Not Started'}
-                            </span>
-                          </div>
-                          {task.description ? <p className="mt-1 text-sm text-brand-text-muted">{task.description}</p> : null}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </SectionCard>
+              <div className="mt-5 flex flex-wrap gap-2 rounded-2xl border border-brand-border bg-brand-bg p-2">
+                {(['all', 'expense', 'task', 'memory', 'moduleEntry'] as const).map((filter) => {
+                  const meta = filter === 'all' ? 'All' : filter === 'expense' ? 'Expenses' : filter === 'task' ? 'Tasks' : filter === 'memory' ? 'Memories' : 'Modules';
+                  const count = filter === 'all' ? linkedItems.length : linkedItems.filter((item) => item.kind === filter).length;
+                  const isActive = selectedRecordFilter === filter;
 
-                <SectionCard
-                  title="Memories"
-                  icon={Heart}
-                  count={linkedMemories.length}
-                  emptyMessage="No memories were saved for this day."
-                  actionLabel="Open memories"
-                  onAction={() => navigate('/app/memories')}
-                >
-                  {linkedMemories.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-brand-border bg-brand-bg p-4 text-sm text-brand-text-muted">No memories linked to this day yet.</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {linkedMemories.map((memory) => (
-                        <div key={memory.id} className="rounded-2xl border border-brand-border bg-brand-bg px-3 py-2">
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="text-sm font-semibold text-brand-text">{memory.title}</span>
-                            <span className="text-sm text-brand-text-muted">{memory.category || 'General'}</span>
-                          </div>
-                          {memory.description ? <p className="mt-1 text-sm text-brand-text-muted">{memory.description}</p> : null}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </SectionCard>
+                  return (
+                    <button
+                      key={filter}
+                      type="button"
+                      onClick={() => setSelectedRecordFilter(filter)}
+                      className={`rounded-xl px-3 py-2 text-sm font-medium transition-colors ${isActive ? 'bg-brand-emerald text-white' : 'text-brand-text-muted hover:bg-brand-border/60'}`}
+                    >
+                      {meta} <span className="ml-1 text-xs opacity-80">({count})</span>
+                    </button>
+                  );
+                })}
+              </div>
 
-                <SectionCard
-                  title="Custom modules"
-                  icon={Boxes}
-                  count={linkedModuleEntries.length}
-                  emptyMessage="No custom-module entries were recorded for this day."
-                  actionLabel="Open modules"
-                  onAction={() => navigate('/app/modules')}
-                >
-                  {linkedModuleEntries.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-brand-border bg-brand-bg p-4 text-sm text-brand-text-muted">No module entries for this day yet.</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {linkedModuleEntries.map(({ entry, module }) => {
-                        const fields = moduleFields.filter((field) => field.moduleId === entry.moduleId);
-                        return (
-                          <div key={entry.id} className="rounded-2xl border border-brand-border bg-brand-bg px-3 py-2">
-                            <p className="text-sm font-semibold text-brand-text">{module?.name || 'Module'}</p>
+              <div className="mt-6 space-y-3">
+                {filteredLinkedItems.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-brand-border bg-brand-bg p-6 text-sm text-brand-text-muted">
+                    <div className="flex items-center gap-2 text-brand-text">
+                      <ListFilter className="h-4 w-4 text-brand-emerald" />
+                      No records match this filter for this day yet.
+                    </div>
+                  </div>
+                ) : (
+                  filteredLinkedItems.map((item) => {
+                    if (item.kind === 'expense') {
+                      const expense = item.record as Expense;
+                      return (
+                        <div key={expense.id} className="rounded-2xl border border-brand-border bg-brand-bg p-3">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-brand-emerald/10 text-brand-emerald">
+                                  <Receipt className="h-4 w-4" />
+                                </span>
+                                <div>
+                                  <p className="text-sm font-semibold text-brand-text">{expense.category || 'Uncategorized expense'}</p>
+                                  <p className="text-xs uppercase tracking-[0.16em] text-brand-text-muted">Expense</p>
+                                </div>
+                              </div>
+                              <p className="mt-2 text-sm text-brand-text-muted">{expense.description || 'No notes attached to this record.'}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button type="button" onClick={() => setEditingExpense(expense)} className="rounded-xl border border-brand-border bg-brand-bg-card px-3 py-2 text-sm font-medium text-brand-text transition-colors hover:bg-brand-border/60">Edit</button>
+                              <button type="button" onClick={() => setDeleteTarget({ kind: 'expense', record: expense })} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 transition-colors hover:bg-rose-100">Delete</button>
+                            </div>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2 text-sm text-brand-text-muted">
+                            <span className="rounded-full border border-brand-border bg-brand-bg-card px-2.5 py-1">{expense.time || 'No time'}</span>
+                            <span className="rounded-full border border-brand-border bg-brand-bg-card px-2.5 py-1">{expense.amount.toFixed(2)} {expense.currency || 'INR'}</span>
+                            {expense.paymentMethod ? <span className="rounded-full border border-brand-border bg-brand-bg-card px-2.5 py-1">{expense.paymentMethod}</span> : null}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    if (item.kind === 'task') {
+                      const task = item.record as Task;
+                      return (
+                        <div key={task.id} className="rounded-2xl border border-brand-border bg-brand-bg p-3">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-brand-emerald/10 text-brand-emerald">
+                                  <CheckCircle2 className="h-4 w-4" />
+                                </span>
+                                <div>
+                                  <p className="text-sm font-semibold text-brand-text">{task.title}</p>
+                                  <p className="text-xs uppercase tracking-[0.16em] text-brand-text-muted">Task</p>
+                                </div>
+                              </div>
+                              <p className="mt-2 text-sm text-brand-text-muted">{task.description || 'No notes attached to this task.'}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button type="button" onClick={() => setEditingTask(task)} className="rounded-xl border border-brand-border bg-brand-bg-card px-3 py-2 text-sm font-medium text-brand-text transition-colors hover:bg-brand-border/60">Edit</button>
+                              <button type="button" onClick={() => setDeleteTarget({ kind: 'task', record: task })} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 transition-colors hover:bg-rose-100">Delete</button>
+                            </div>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2 text-sm text-brand-text-muted">
+                            <span className="rounded-full border border-brand-border bg-brand-bg-card px-2.5 py-1">{task.status || 'Not Started'}</span>
+                            {task.priority ? <span className="rounded-full border border-brand-border bg-brand-bg-card px-2.5 py-1">{task.priority}</span> : null}
+                            {task.dueDate ? <span className="rounded-full border border-brand-border bg-brand-bg-card px-2.5 py-1">Due {task.dueDate}</span> : null}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    if (item.kind === 'memory') {
+                      const memory = item.record as Memory;
+                      return (
+                        <div key={memory.id} className="rounded-2xl border border-brand-border bg-brand-bg p-3">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-brand-emerald/10 text-brand-emerald">
+                                  <Heart className="h-4 w-4" />
+                                </span>
+                                <div>
+                                  <p className="text-sm font-semibold text-brand-text">{memory.title}</p>
+                                  <p className="text-xs uppercase tracking-[0.16em] text-brand-text-muted">Memory</p>
+                                </div>
+                              </div>
+                              <p className="mt-2 text-sm text-brand-text-muted">{memory.description || 'No notes attached to this memory.'}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button type="button" onClick={() => setEditingMemory(memory)} className="rounded-xl border border-brand-border bg-brand-bg-card px-3 py-2 text-sm font-medium text-brand-text transition-colors hover:bg-brand-border/60">Edit</button>
+                              <button type="button" onClick={() => setDeleteTarget({ kind: 'memory', record: memory })} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 transition-colors hover:bg-rose-100">Delete</button>
+                            </div>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2 text-sm text-brand-text-muted">
+                            {memory.category ? <span className="rounded-full border border-brand-border bg-brand-bg-card px-2.5 py-1">{memory.category}</span> : null}
+                            {memory.location ? <span className="rounded-full border border-brand-border bg-brand-bg-card px-2.5 py-1">{memory.location}</span> : null}
+                            {memory.mood ? <span className="rounded-full border border-brand-border bg-brand-bg-card px-2.5 py-1">{memory.mood}</span> : null}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    const entry = item.record as ModuleEntry;
+                    const module = item.module;
+                    const fields = moduleFields.filter((field) => field.moduleId === entry.moduleId);
+                    return (
+                      <div key={entry.id} className="rounded-2xl border border-brand-border bg-brand-bg p-3">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-brand-emerald/10 text-brand-emerald">
+                                <Boxes className="h-4 w-4" />
+                              </span>
+                              <div>
+                                <p className="text-sm font-semibold text-brand-text">{module?.name || 'Module entry'}</p>
+                                <p className="text-xs uppercase tracking-[0.16em] text-brand-text-muted">Custom module</p>
+                              </div>
+                            </div>
                             <div className="mt-2 space-y-1">
-                              {fields.map((field) => (
+                              {fields.slice(0, 3).map((field) => (
                                 <div key={field.id} className="flex items-center justify-between gap-3 text-sm text-brand-text-muted">
                                   <span>{field.fieldName}</span>
                                   <span className="text-right font-medium text-brand-text">{getModuleDisplayValue(entry.data[field.id], field)}</span>
@@ -492,15 +671,19 @@ export default function DailyLogPage() {
                               ))}
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </SectionCard>
+                          <div className="flex flex-wrap gap-2">
+                            <button type="button" onClick={() => { setEditingModuleEntry(entry); setEditingModule(module); }} className="rounded-xl border border-brand-border bg-brand-bg-card px-3 py-2 text-sm font-medium text-brand-text transition-colors hover:bg-brand-border/60">Edit</button>
+                            <button type="button" onClick={() => setDeleteTarget({ kind: 'moduleEntry', record: entry, module })} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 transition-colors hover:bg-rose-100">Delete</button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </>
           ) : (
-            <div className="rounded-3xl border border-dashed border-brand-border bg-brand-bg p-8 text-center">
+            <div className="flex h-full min-h-[280px] flex-col items-center justify-center rounded-3xl border border-dashed border-brand-border bg-brand-bg p-8 text-center">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-emerald/10 text-brand-emerald">
                 <BookOpen className="h-6 w-6" />
               </div>
@@ -573,78 +756,109 @@ export default function DailyLogPage() {
         </div>
       ) : null}
 
+      {editingExpense ? (
+        <ExpenseForm
+          isOpen={Boolean(editingExpense)}
+          mode="edit"
+          defaultCurrency={workbookData?.settings?.currency || 'INR'}
+          expense={editingExpense}
+          onClose={() => setEditingExpense(null)}
+          onSubmitExpense={handleExpenseSubmit}
+        />
+      ) : null}
+
+      {editingTask ? (
+        <EditTaskForm
+          task={editingTask}
+          isOpen={Boolean(editingTask)}
+          onClose={() => setEditingTask(null)}
+          onSubmitTask={handleTaskSubmit}
+        />
+      ) : null}
+
+      {editingMemory ? (
+        <MemoryForm
+          isOpen={Boolean(editingMemory)}
+          mode="edit"
+          memory={editingMemory}
+          onClose={() => setEditingMemory(null)}
+          onSubmitMemory={handleMemorySubmit}
+        />
+      ) : null}
+
+      {editingModuleEntry && editingModule ? (
+        <ModuleEntryForm
+          isOpen={Boolean(editingModuleEntry)}
+          module={editingModule}
+          fields={moduleFields.filter((field) => field.moduleId === editingModule.id)}
+          entry={editingModuleEntry}
+          onClose={() => {
+            setEditingModuleEntry(null);
+            setEditingModule(null);
+          }}
+          onSubmitEntry={handleModuleEntrySubmit}
+        />
+      ) : null}
+
       {deleteTarget ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-          <div role="dialog" aria-modal="true" aria-labelledby="delete-daily-log-title" className="w-full max-w-lg rounded-3xl border border-brand-border bg-brand-bg-card p-5 shadow-soft">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 id="delete-daily-log-title" className="text-xl font-semibold text-brand-text">Delete day</h2>
-                <p className="mt-1 text-sm text-brand-text-muted">Delete the day marker for <span className="font-medium text-brand-text">{deleteTarget.date}</span>?</p>
+        deleteTarget.kind === 'dailyLog' ? (
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+            <div role="dialog" aria-modal="true" aria-labelledby="delete-daily-log-title" className="w-full max-w-lg rounded-3xl border border-brand-border bg-brand-bg-card p-5 shadow-soft">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 id="delete-daily-log-title" className="text-xl font-semibold text-brand-text">Delete day</h2>
+                  <p className="mt-1 text-sm text-brand-text-muted">Delete the day marker for <span className="font-medium text-brand-text">{deleteTarget.kind === 'dailyLog' ? (deleteTarget.record as DailyLog).date : ''}</span>?</p>
+                </div>
+                <button type="button" onClick={() => setDeleteTarget(null)} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-brand-border bg-brand-bg text-brand-text-muted transition-colors hover:bg-brand-border/60" aria-label="Close delete day dialog">
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
-              <button type="button" onClick={() => setDeleteTarget(null)} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-brand-border bg-brand-bg text-brand-text-muted transition-colors hover:bg-brand-border/60" aria-label="Close delete day dialog">
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
 
-            <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-              Deleting this daily-log marker does not delete linked expenses, tasks, memories, or custom-module entries. It only removes the date marker itself.
-            </div>
+              <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                Deleting this daily-log marker does not delete linked expenses, tasks, memories, or custom-module entries. It only removes the date marker itself.
+              </div>
 
-            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
-              <button type="button" onClick={() => setDeleteTarget(null)} className="rounded-2xl border border-brand-border bg-brand-bg px-4 py-3 text-sm font-medium text-brand-text transition-colors hover:bg-brand-border/60">Cancel</button>
-              <button type="button" onClick={handleDeleteDailyLog} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-rose-700">
-                <Trash2 className="h-4 w-4" />
-                Delete day
-              </button>
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                <button type="button" onClick={() => setDeleteTarget(null)} className="rounded-2xl border border-brand-border bg-brand-bg px-4 py-3 text-sm font-medium text-brand-text transition-colors hover:bg-brand-border/60">Cancel</button>
+                <button type="button" onClick={handleDeleteDailyLog} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-rose-700">
+                  <Trash2 className="h-4 w-4" />
+                  Delete day
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+            <div role="dialog" aria-modal="true" aria-labelledby="delete-linked-record-title" className="w-full max-w-lg rounded-3xl border border-brand-border bg-brand-bg-card p-5 shadow-soft">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-700">
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 id="delete-linked-record-title" className="text-xl font-semibold text-brand-text">Delete linked record</h2>
+                    <p className="mt-1 text-sm text-brand-text-muted">
+                      Remove this {deleteTarget.kind === 'expense' ? 'expense' : deleteTarget.kind === 'task' ? 'task' : deleteTarget.kind === 'memory' ? 'memory' : 'module entry'} from this day’s workbook view?
+                    </p>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setDeleteTarget(null)} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-brand-border bg-brand-bg text-brand-text-muted transition-colors hover:bg-brand-border/60" aria-label="Close delete linked record dialog">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                <button type="button" onClick={() => setDeleteTarget(null)} className="rounded-2xl border border-brand-border bg-brand-bg px-4 py-3 text-sm font-medium text-brand-text transition-colors hover:bg-brand-border/60">Cancel</button>
+                <button type="button" onClick={handleDeleteLinkedRecord} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-rose-700">
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )
       ) : null}
     </div>
-  );
-}
-
-function SectionCard({
-  title,
-  icon: Icon,
-  count,
-  actionLabel,
-  onAction,
-  children
-}: {
-  title: string;
-  icon: React.ComponentType<{ className?: string }>;
-  count: number;
-  emptyMessage: string;
-  actionLabel: string;
-  onAction: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-2xl border border-brand-border bg-brand-bg p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Icon className="h-4 w-4 text-brand-emerald" />
-          <h3 className="text-sm font-semibold text-brand-text">{title}</h3>
-        </div>
-        <span className="rounded-full border border-brand-border bg-brand-bg-card px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-brand-text-muted">
-          {count}
-        </span>
-      </div>
-
-      <div className="mt-4">
-        {children}
-      </div>
-
-      <button
-        type="button"
-        onClick={onAction}
-        className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-brand-emerald transition-colors hover:text-brand-emerald/80"
-      >
-        {actionLabel}
-        <ArrowLeft className="h-4 w-4 rotate-180" />
-      </button>
-    </section>
   );
 }
 
